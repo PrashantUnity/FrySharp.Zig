@@ -213,6 +213,12 @@ public sealed class ZigNotebookKernel : INotebookKernel
         bool hasMain = code.Contains("fn main(") || code.Contains("pub fn main(");
         bool hasStd = code.Contains("const std") || code.Contains("@import(\"std\")");
         bool hasImport = code.Contains("fry_display.zig");
+        // Backward compatibility: Zig 0.15+ removed std.io.getStdOut() and std.io.getStdErr()
+        if (code.Contains("std.io.getStdOut") || code.Contains("std.io.getStdErr"))
+        {
+            code = code.Replace("std.io.getStdOut", "fry.getStdOut")
+                       .Replace("std.io.getStdErr", "fry.getStdErr");
+        }
 
         var sb = new StringBuilder();
         if (!hasStd)
@@ -228,6 +234,9 @@ public sealed class ZigNotebookKernel : INotebookKernel
                 const display = fry.display;
                 const show = fry.show;
                 const dump = fry.dump;
+                const print = fry.print;
+                const getStdOut = fry.getStdOut;
+                const getStdErr = fry.getStdErr;
                 """);
         }
 

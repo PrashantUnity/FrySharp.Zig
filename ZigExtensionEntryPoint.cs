@@ -38,7 +38,7 @@ public class ZigExtensionEntryPoint : IExtensionEntryPoint
             Title = "Zig Guide & Systems Scripting",
             IconKind = Material.Icons.MaterialIconKind.CodeBraces,
             AccentColor = "#F7A41D",
-            Badge = "Zig 0.13+",
+            Badge = "Zig 0.13+ / 0.17+",
             Description = "Guide to Zig systems automation, fast single-file scripting, memory safety, comptime, and language server setup.",
             Articles = new List<DocArticle>
             {
@@ -72,13 +72,30 @@ public class ZigExtensionEntryPoint : IExtensionEntryPoint
                         new()
                         {
                             Language = "zig",
-                            Description = "Basic Zig CLI program with formatted stdout.",
+                            Description = "Basic Zig CLI program with unbuffered output.",
                             Code = """
                                 const std = @import("std");
 
-                                pub fn main() !void {
-                                    const stdout = std.io.getStdOut().writer();
+                                pub fn main() void {
+                                    std.debug.print("Hello from FrySharp Zig!\n", .{});
+                                }
+                                """
+                        },
+                        new()
+                        {
+                            Language = "zig",
+                            Description = "Idiomatic Zig 0.15+ CLI program with buffered stdout.",
+                            Code = """
+                                const std = @import("std");
+
+                                pub fn main(init: std.process.Init) !void {
+                                    const io = init.io;
+                                    var stdout_buf: [1024]u8 = undefined;
+                                    var stdout_writer = std.Io.File.stdout().writer(io, &stdout_buf);
+                                    const stdout = &stdout_writer.interface;
+
                                     try stdout.print("Hello from FrySharp Zig!\n", .{});
+                                    try stdout.flush();
                                 }
                                 """
                         }

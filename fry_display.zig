@@ -458,6 +458,48 @@ pub fn table(data: anytype) void {
     Display.show(data);
 }
 
+pub const FryWriter = struct {
+    pub fn print(self: @This(), comptime fmt: []const u8, args: anytype) !void {
+        _ = self;
+        std.debug.print(fmt, args);
+    }
+    pub fn writeAll(self: @This(), bytes: []const u8) !void {
+        _ = self;
+        std.debug.print("{s}", .{bytes});
+    }
+    pub fn flush(self: @This()) !void {
+        _ = self;
+    }
+};
+
+pub const FryStdOut = struct {
+    pub fn writer(self: @This()) FryWriter {
+        _ = self;
+        return .{};
+    }
+};
+
+pub const io = struct {
+    pub fn getStdOut() FryStdOut {
+        return .{};
+    }
+    pub fn getStdErr() FryStdOut {
+        return .{};
+    }
+};
+
+pub fn getStdOut() FryStdOut {
+    return .{};
+}
+
+pub fn getStdErr() FryStdOut {
+    return .{};
+}
+
+pub fn print(comptime fmt: []const u8, args: anytype) void {
+    std.debug.print(fmt, args);
+}
+
 // ------------------------------------------------------------------------------
 // Internal JSON Encoding Helpers
 // ------------------------------------------------------------------------------

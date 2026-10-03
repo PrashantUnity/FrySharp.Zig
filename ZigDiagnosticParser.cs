@@ -37,6 +37,11 @@ public sealed class ZigDiagnosticParser : IDiagnosticParser
                 var message = match.Groups["message"].Value.Trim();
                 var sevText = match.Groups["severity"].Value.ToLowerInvariant();
 
+                if (message.Contains("struct 'std' has no member named 'io'"))
+                {
+                    message += " (Zig 0.15+ removed 'std.io.getStdOut()'. Use 'std.debug.print(\"...\", .{})' for unbuffered output, or 'std.Io.File.stdout().writer(io, &buf)' with 'pub fn main(init: std.process.Init) !void').";
+                }
+
                 var severity = DiagnosticSeverity.Error;
                 if (sevText == "warning") severity = DiagnosticSeverity.Warning;
                 else if (sevText == "note") severity = DiagnosticSeverity.Info;
