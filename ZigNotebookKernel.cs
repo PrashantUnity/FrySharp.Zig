@@ -10,12 +10,14 @@ using PdfEditorApp.Plugins.CSharpEditor.Models;
 using PdfEditorApp.Plugins.CSharpEditor.Services.Kernels;
 using PdfEditorApp.Plugins.CSharpEditor.Services.Processes;
 using PdfEditorApp.Plugins.CSharpEditor.Services.Toolchains;
+using PdfEditorApp.Plugins.CSharpEditor.Visuals.Interaction;
 
 namespace ZigSupportExtension;
 
 /// <summary>
 /// Polyglot interactive notebook kernel for Zig.
 /// Evaluates Zig notebook cells via 'zig run', supporting both full programs and cell snippets.
+/// Integrates ExternalOutputProcessor and ZigDisplayRuntime for genuine Display.show / Display.chart / Display.surface APIs.
 /// </summary>
 public sealed class ZigNotebookKernel : INotebookKernel
 {
@@ -78,38 +80,55 @@ public sealed class ZigNotebookKernel : INotebookKernel
         var outDir = Path.Combine(Path.GetTempPath(), "FryStudio", "zig_cells", hash);
         Directory.CreateDirectory(outDir);
 
+        // Ensure genuine Zig display runtime is available in cell directory
+        await ZigDisplayRuntime.EnsureInDirectoryAsync(outDir, ct).ConfigureAwait(false);
+
         var sourcePath = Path.Combine(outDir, "cell.zig");
         await File.WriteAllTextAsync(sourcePath, fullProgram, ct).ConfigureAwait(false);
 
         var zigExecutable = resolution.Toolchain.ExecutablePath;
+        using var visuals = new ExternalVisualSession();
         var consoleBuilder = new StringBuilder();
         var errorBuilder = new StringBuilder();
+
+        var processor = new ExternalOutputProcessor(
+            onConsoleText: text =>
+            {
+                consoleBuilder.Append(text);
+                request.OnConsole?.Invoke(text);
+            },
+            onRichOutput: bundle =>
+            {
+                request.OnRichOutput?.Invoke(bundle);
+            },
+            onShare: (name, json) =>
+            {
+                _sharedVariables[name] = ("dynamic", json);
+            },
+            visuals: visuals.Visuals);
 
         int exitCode;
         try
         {
-            var startSpec = new ProcessStartSpec
+            var startSpec = visuals.Apply(new ProcessStartSpec
             {
                 FileName = zigExecutable,
                 Arguments = ["run", sourcePath],
                 WorkingDirectory = workingFolder
-            };
+            });
 
             using var runProcess = _processes.Start(
                 startSpec,
-                outText =>
-                {
-                    consoleBuilder.Append(outText);
-                    request.OnConsole?.Invoke(outText);
-                },
+                outText => processor.ProcessChunk(outText),
                 errText =>
                 {
                     errorBuilder.Append(errText);
-                    request.OnConsole?.Invoke(errText);
+                    processor.ProcessChunk(errText);
                 });
 
             runProcess.CloseInput();
             exitCode = await runProcess.Completion.WaitAsync(ct).ConfigureAwait(false);
+            processor.Flush();
         }
         catch (OperationCanceledException)
         {
@@ -191,16 +210,34 @@ public sealed class ZigNotebookKernel : INotebookKernel
 
     private static string BuildCellProgram(string code)
     {
-        // If the cell defines main, run it directly
-        if (code.Contains("fn main(") || code.Contains("pub fn main("))
+        bool hasMain = code.Contains("fn main(") || code.Contains("pub fn main(");
+        bool hasStd = code.Contains("const std") || code.Contains("@import(\"std\")");
+        bool hasImport = code.Contains("fry_display.zig");
+
+        var sb = new StringBuilder();
+        if (!hasStd)
         {
-            return code;
+            sb.AppendLine("""const std = @import("std");""");
+        }
+        if (!hasImport)
+        {
+            sb.AppendLine("""
+                const fry = @import("fry_display.zig");
+                const Display = fry.Display;
+                const Visualizer = fry.Visualizer;
+                const show = fry.show;
+                const dump = fry.dump;
+                """);
         }
 
-        // Otherwise wrap bare expressions or statements inside a main function
-        return $$"""
-            const std = @import("std");
+        string header = sb.ToString();
+        if (hasMain)
+        {
+            return header + code;
+        }
 
+        return $$"""
+            {{header}}
             pub fn main() void {
                 {{code}}
             }

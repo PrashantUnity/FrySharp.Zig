@@ -2,7 +2,7 @@
   "id": "zig-support",
   "name": "Zig Language Support",
   "version": "1.0.0",
-  "description": "First-class Zig language support for FrySharp, providing compilation, ZLS language server integration, Problems diagnostic parsing, and toolchain discovery.",
+  "description": "First-class Zig language support for FrySharp, providing compilation, interactive notebooks, charts, 3D plots, visualizers, ZLS language server integration, Problems diagnostic parsing, and toolchain discovery.",
   "author": "Code Fry Dev",
   "repository": "https://github.com/PrashantUnity/FrySharp.Zig",
   "license": "MIT",
@@ -14,6 +14,7 @@
     "ZigDiagnosticParser.cs",
     "ZigScriptRunner.cs",
     "ZigNotebookKernel.cs",
+    "ZigDisplayRuntime.cs",
     "ZigSyntaxHighlighting.cs"
   ],
   "settings": {

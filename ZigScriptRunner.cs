@@ -10,7 +10,7 @@ namespace ZigSupportExtension;
 
 /// <summary>
 /// Prepares process run plans for Zig scripts and executables with full interactive stdin support.
-/// Executes via 'zig run <sourceFile>' or two-phase compilation.
+/// Automatically injects fry_display.zig for genuine Display.show / Display.chart / Display.surface APIs.
 /// </summary>
 public sealed class ZigScriptRunner : IScriptRunner
 {
@@ -21,7 +21,7 @@ public sealed class ZigScriptRunner : IScriptRunner
         _toolchain = toolchain ?? throw new ArgumentNullException(nameof(toolchain));
     }
 
-    public Task<ScriptRunPlan> PlanAsync(ScriptRunContext context, CancellationToken ct = default)
+    public async Task<ScriptRunPlan> PlanAsync(ScriptRunContext context, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(context);
 
@@ -30,8 +30,16 @@ public sealed class ZigScriptRunner : IScriptRunner
         var scriptPath = context.SourceFilePath;
         var workDir = context.WorkingDirectory;
 
-        // If directory has build.zig and the script is main or not specified, we can run 'zig build run'
-        // Otherwise, run single-file mode directly via 'zig run <file>'
+        var scriptDir = Path.GetDirectoryName(scriptPath);
+        if (!string.IsNullOrEmpty(scriptDir) && Directory.Exists(scriptDir))
+        {
+            await ZigDisplayRuntime.EnsureInDirectoryAsync(scriptDir, ct).ConfigureAwait(false);
+        }
+        if (!string.IsNullOrEmpty(workDir) && Directory.Exists(workDir))
+        {
+            await ZigDisplayRuntime.EnsureInDirectoryAsync(workDir, ct).ConfigureAwait(false);
+        }
+
         var step = new ProcessStep(
             "run",
             new ProcessStartSpec
@@ -42,6 +50,6 @@ public sealed class ZigScriptRunner : IScriptRunner
             },
             IsBuildStep: false);
 
-        return Task.FromResult(new ScriptRunPlan([step]));
+        return new ScriptRunPlan([step]);
     }
 }
