@@ -1,5 +1,6 @@
 #nullable enable
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
@@ -22,8 +23,10 @@ public sealed class ZigNotebookKernel : INotebookKernel
     private readonly IProcessLauncher _processes;
     private readonly IHostEnvironment _host;
     private readonly KernelCreationContext _context;
+    private readonly Dictionary<string, (string TypeName, string JsonValue)> _sharedVariables = new(StringComparer.Ordinal);
 
     private int _executionCount;
+    private bool _isDisposed;
 
     public ZigNotebookKernel(
         ZigToolchainProvider toolchain,
@@ -47,7 +50,7 @@ public sealed class ZigNotebookKernel : INotebookKernel
         var clock = Stopwatch.StartNew();
         _executionCount++;
 
-        var workingFolder = _context.WorkingDirectory();
+        var workingFolder = _context.WorkingDirectory?.Invoke();
         if (string.IsNullOrWhiteSpace(workingFolder) || !Directory.Exists(workingFolder))
         {
             workingFolder = _host.HomeDirectory;
@@ -131,18 +134,60 @@ public sealed class ZigNotebookKernel : INotebookKernel
             };
         }
 
+        bool success = exitCode == 0;
+        string errOutput = errorBuilder.ToString();
         return new KernelExecutionResult
         {
-            Success = exitCode == 0,
-            ErrorMessage = exitCode != 0 ? errorBuilder.ToString() : null,
+            Success = success,
+            ErrorMessage = success ? null : (!string.IsNullOrEmpty(errOutput) ? errOutput : $"Process exited with code {exitCode}"),
             ConsoleOutput = consoleBuilder.ToString(),
             Elapsed = clock.Elapsed
         };
     }
 
-    public Task StopAsync() => Task.CompletedTask;
+    public Task<IReadOnlyList<NotebookVariableInfo>> GetVariablesAsync(CancellationToken ct)
+    {
+        var list = new List<NotebookVariableInfo>();
+        foreach (var kvp in _sharedVariables)
+        {
+            list.Add(new NotebookVariableInfo
+            {
+                Name = kvp.Key,
+                TypeName = kvp.Value.TypeName,
+                ValueDisplay = kvp.Value.JsonValue,
+                Kernel = DisplayName
+            });
+        }
+        return Task.FromResult<IReadOnlyList<NotebookVariableInfo>>(list);
+    }
 
-    public void Dispose() { }
+    public Task<string> GetValueJsonAsync(string name, CancellationToken ct)
+    {
+        if (_sharedVariables.TryGetValue(name, out var val))
+        {
+            return Task.FromResult(val.JsonValue);
+        }
+        return Task.FromResult("null");
+    }
+
+    public Task SetValueFromJsonAsync(string name, string json, CancellationToken ct)
+    {
+        _sharedVariables[name] = ("dynamic", json);
+        return Task.CompletedTask;
+    }
+
+    public void HardReset()
+    {
+        _sharedVariables.Clear();
+        _executionCount = 0;
+    }
+
+    public void Dispose()
+    {
+        if (_isDisposed) return;
+        _isDisposed = true;
+        _sharedVariables.Clear();
+    }
 
     private static string BuildCellProgram(string code)
     {
