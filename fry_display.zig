@@ -45,12 +45,17 @@ pub const Display = struct {
     /// Show or dump any Zig value as an interactive data table in FrySharp.
     /// Inspects structs, arrays, slices, and primitives comptime-reflectively.
     pub fn show(data: anytype) void {
-        table("", data);
+        Display.table("", data);
     }
 
     /// Dump any Zig value as an interactive table and return it.
     pub fn dump(data: anytype) void {
-        table("", data);
+        Display.table("", data);
+    }
+
+    /// Display any Zig value directly in FrySharp.
+    pub fn display(data: anytype) void {
+        Display.table("", data);
     }
 
     /// Emit an interactive, sortable, searchable data table from any Zig data structure.
@@ -437,12 +442,20 @@ pub const Visualizer = struct {
 // Top-Level Convenience Functions (idiomatic show(x), dump(x), display(x))
 // ------------------------------------------------------------------------------
 
+pub fn display(data: anytype) void {
+    Display.show(data);
+}
+
 pub fn show(data: anytype) void {
     Display.show(data);
 }
 
 pub fn dump(data: anytype) void {
     Display.dump(data);
+}
+
+pub fn table(data: anytype) void {
+    Display.show(data);
 }
 
 // ------------------------------------------------------------------------------
@@ -540,3 +553,4 @@ fn getCoord(pt: anytype, comptime idx: usize) f64 {
         else => return 0.0,
     }
 }
+

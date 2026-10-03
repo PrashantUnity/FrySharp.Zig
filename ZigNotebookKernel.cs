@@ -225,22 +225,104 @@ public sealed class ZigNotebookKernel : INotebookKernel
                 const fry = @import("fry_display.zig");
                 const Display = fry.Display;
                 const Visualizer = fry.Visualizer;
+                const display = fry.display;
                 const show = fry.show;
                 const dump = fry.dump;
                 """);
         }
 
-        string header = sb.ToString();
         if (hasMain)
         {
-            return header + code;
+            return sb.ToString() + "\n" + code;
         }
 
-        return $$"""
-            {{header}}
-            pub fn main() void {
-                {{code}}
+        SplitZigCode(code, out var topLevel, out var body);
+
+        foreach (var item in topLevel)
+        {
+            sb.AppendLine(item);
+            sb.AppendLine();
+        }
+
+        sb.AppendLine("pub fn main() !void {");
+        foreach (var line in body)
+        {
+            sb.AppendLine("    " + line);
+        }
+        sb.AppendLine("}");
+
+        return sb.ToString();
+    }
+
+    private static void SplitZigCode(string code, out List<string> topLevel, out List<string> body)
+    {
+        topLevel = new List<string>();
+        body = new List<string>();
+
+        var lines = code.Split('\n');
+        var currentBlock = new List<string>();
+        bool isTopLevelBlock = false;
+        int braceDepth = 0;
+
+        foreach (var raw in lines)
+        {
+            var line = raw.TrimEnd();
+            var trimmed = line.Trim();
+
+            if (braceDepth == 0)
+            {
+                if (string.IsNullOrWhiteSpace(trimmed))
+                {
+                    continue;
+                }
+
+                // Check if this begins a top-level construct: function, struct, enum, union, etc.
+                if (trimmed.StartsWith("fn ") || trimmed.StartsWith("pub fn ") || trimmed.StartsWith("export fn ") ||
+                    trimmed.StartsWith("test ") ||
+                    (trimmed.StartsWith("const ") && (trimmed.Contains("struct {") || trimmed.Contains("enum {") || trimmed.Contains("union {") || trimmed.Contains("opaque {"))) ||
+                    (trimmed.StartsWith("pub const ") && (trimmed.Contains("struct {") || trimmed.Contains("enum {") || trimmed.Contains("union {") || trimmed.Contains("opaque {"))))
+                {
+                    isTopLevelBlock = true;
+                    currentBlock.Add(line);
+                }
+                else
+                {
+                    isTopLevelBlock = false;
+                    body.Add(line);
+                }
             }
-            """;
+            else
+            {
+                if (isTopLevelBlock)
+                {
+                    currentBlock.Add(line);
+                }
+                else
+                {
+                    body.Add(line);
+                }
+            }
+
+            foreach (var ch in trimmed)
+            {
+                if (ch == '{') braceDepth++;
+                else if (ch == '}') braceDepth = Math.Max(0, braceDepth - 1);
+            }
+
+            if (braceDepth == 0 && isTopLevelBlock && currentBlock.Count > 0)
+            {
+                topLevel.Add(string.Join("\n", currentBlock));
+                currentBlock.Clear();
+                isTopLevelBlock = false;
+            }
+        }
+
+        if (currentBlock.Count > 0)
+        {
+            if (isTopLevelBlock)
+                topLevel.Add(string.Join("\n", currentBlock));
+            else
+                body.AddRange(currentBlock);
+        }
     }
 }

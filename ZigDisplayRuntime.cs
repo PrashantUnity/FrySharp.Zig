@@ -68,11 +68,17 @@ pub const Display = struct {
         Display.table("", data);
     }
 
+    /// Display any Zig value directly in FrySharp.
+    pub fn display(data: anytype) void {
+        Display.table("", data);
+    }
+
     /// Emit an interactive, sortable, searchable data table from any Zig data structure.
     pub fn table(title: []const u8, data: anytype) void {
         var buf = Buffer{};
         buf.writeAll(DISPLAY_MARKER ++ " {\"type\":\"display\",\"data\":{\"" ++ TABLE_MIME ++ "\":{");
 
+        // Title
         buf.writeAll("\"title\":");
         jsonWriteString(&buf, if (title.len > 0) title else "Table");
         buf.writeAll(",");
@@ -82,6 +88,7 @@ pub const Display = struct {
 
         switch (info) {
             .@"struct" => |st| {
+                // Single struct: columns = ["Field", "Value"], rows = [[name, value], ...]
                 buf.writeAll("\"columns\":[\"Field\",\"Value\"],\"numeric\":[false,false],\"rows\":[");
                 var first = true;
                 inline for (st.field_names) |f_name| {
@@ -142,6 +149,7 @@ pub const Display = struct {
 
         switch (elem_info) {
             .@"struct" => |elem_st| {
+                // Array of structs: columns are struct field names
                 buf.writeAll("\"columns\":[");
                 inline for (elem_st.field_names, 0..) |f_name, i| {
                     if (i > 0) buf.writeByte(',');
@@ -170,6 +178,7 @@ pub const Display = struct {
                 buf.print("],\"totalRows\":{d},\"totalColumns\":{d}", .{ slice.len, elem_st.field_names.len });
             },
             else => {
+                // Primitive slice/array: columns = ["Index", "Value"]
                 buf.writeAll("\"columns\":[\"Index\",\"Value\"],\"numeric\":[true,false],\"rows\":[");
                 for (slice, 0..) |item, idx| {
                     if (idx > 0) buf.writeByte(',');
@@ -189,17 +198,20 @@ pub const Display = struct {
     }
 
     // --------------------------------------------------------------------------
-    // 2D Charts
+    // 2D Charts (Line, Bar, Scatter, Pie, Area, Histogram)
     // --------------------------------------------------------------------------
 
+    /// Emit a 2D line chart with numeric Y values.
     pub fn lineChart(title: []const u8, y_values: anytype) void {
         emitChart1D(title, "line", "#4ec9b0", y_values);
     }
 
+    /// Emit a 2D bar chart with labels and Y values.
     pub fn barChart(title: []const u8, labels: anytype, y_values: anytype) void {
         emitChartLabeled(title, "bar", "#F7A41D", labels, y_values);
     }
 
+    /// Emit a 2D scatter chart from an array/slice of [2]f64 or struct{x, y}.
     pub fn scatterChart(title: []const u8, points: anytype) void {
         var buf = Buffer{};
         buf.writeAll(DISPLAY_MARKER ++ " {\"type\":\"display\",\"data\":{\"" ++ CHART_MIME ++ "\":{\"title\":");
@@ -219,18 +231,21 @@ pub const Display = struct {
         buf.flush();
     }
 
+    /// Emit a pie chart from labels and values.
     pub fn pieChart(title: []const u8, labels: anytype, values: anytype) void {
         emitChartLabeled(title, "pie", "#9cdcfe", labels, values);
     }
 
+    /// Emit an area chart.
     pub fn areaChart(title: []const u8, values: anytype) void {
         emitChart1D(title, "area", "#ce9178", values);
     }
 
     // --------------------------------------------------------------------------
-    // 3D Plots
+    // 3D Plots (Surface, Function Mesh, Scatter)
     // --------------------------------------------------------------------------
 
+    /// Emit a 3D parametric surface plot from a 2D grid of Z values.
     pub fn surface3d(title: []const u8, z_grid: anytype) void {
         var buf = Buffer{};
         buf.writeAll(DISPLAY_MARKER ++ " {\"type\":\"display\",\"data\":{\"" ++ PLOT3D_MIME ++ "\":{\"title\":");
@@ -250,6 +265,7 @@ pub const Display = struct {
         buf.flush();
     }
 
+    /// Emit a 3D surface plot generated from a mathematical function f(x, y).
     pub fn surfaceFunc(
         title: []const u8,
         comptime f: fn (x: f64, y: f64) f64,
@@ -281,6 +297,7 @@ pub const Display = struct {
         buf.flush();
     }
 
+    /// Emit a 3D scatter point cloud from an array/slice of [3]f64.
     pub fn scatter3d(title: []const u8, points: anytype) void {
         var buf = Buffer{};
         buf.writeAll(DISPLAY_MARKER ++ " {\"type\":\"display\",\"data\":{\"" ++ PLOT3D_MIME ++ "\":{\"title\":");
@@ -309,6 +326,7 @@ pub const Display = struct {
     // Diagrams, HTML & Markdown
     // --------------------------------------------------------------------------
 
+    /// Emit a Mermaid diagram (flowcharts, sequence diagrams, state diagrams).
     pub fn mermaid(diagramSource: []const u8) void {
         var buf = Buffer{};
         buf.writeAll(DISPLAY_MARKER ++ " {\"type\":\"display\",\"data\":{\"text/vnd.mermaid\":");
@@ -317,6 +335,7 @@ pub const Display = struct {
         buf.flush();
     }
 
+    /// Emit raw HTML content.
     pub fn html(htmlSource: []const u8) void {
         var buf = Buffer{};
         buf.writeAll(DISPLAY_MARKER ++ " {\"type\":\"display\",\"data\":{\"text/html\":");
@@ -325,6 +344,7 @@ pub const Display = struct {
         buf.flush();
     }
 
+    /// Emit markdown content.
     pub fn markdown(mdSource: []const u8) void {
         var buf = Buffer{};
         buf.writeAll(DISPLAY_MARKER ++ " {\"type\":\"display\",\"data\":{\"text/markdown\":");
@@ -332,6 +352,10 @@ pub const Display = struct {
         buf.writeAll("}}\n");
         buf.flush();
     }
+
+    // --------------------------------------------------------------------------
+    // Helpers
+    // --------------------------------------------------------------------------
 
     fn emitChart1D(title: []const u8, kind: []const u8, color: []const u8, values: anytype) void {
         var buf = Buffer{};
@@ -374,6 +398,7 @@ pub const Display = struct {
 
 /// High-level algorithm and data structure visualizer for Zig.
 pub const Visualizer = struct {
+    /// Emit an array visualizer with optional pointers (e.g. .{ .low = 0, .mid = 2, .high = 4 }).
     pub fn array(values: anytype, pointers: anytype, title: []const u8) void {
         var buf = Buffer{};
         buf.writeAll(DISPLAY_MARKER ++ " {\"type\":\"display\",\"data\":{\"" ++ VISUALIZER_MIME ++ "\":{\"title\":");
@@ -407,6 +432,7 @@ pub const Visualizer = struct {
         buf.flush();
     }
 
+    /// Emit a 2D grid/matrix visualizer.
     pub fn grid(matrix: anytype, title: []const u8) void {
         var buf = Buffer{};
         buf.writeAll(DISPLAY_MARKER ++ " {\"type\":\"display\",\"data\":{\"" ++ VISUALIZER_MIME ++ "\":{\"title\":");
@@ -427,6 +453,14 @@ pub const Visualizer = struct {
     }
 };
 
+// ------------------------------------------------------------------------------
+// Top-Level Convenience Functions (idiomatic show(x), dump(x), display(x))
+// ------------------------------------------------------------------------------
+
+pub fn display(data: anytype) void {
+    Display.show(data);
+}
+
 pub fn show(data: anytype) void {
     Display.show(data);
 }
@@ -434,6 +468,14 @@ pub fn show(data: anytype) void {
 pub fn dump(data: anytype) void {
     Display.dump(data);
 }
+
+pub fn table(data: anytype) void {
+    Display.show(data);
+}
+
+// ------------------------------------------------------------------------------
+// Internal JSON Encoding Helpers
+// ------------------------------------------------------------------------------
 
 fn jsonWriteString(buf: *Buffer, str: []const u8) void {
     buf.writeByte('"');
@@ -526,6 +568,8 @@ fn getCoord(pt: anytype, comptime idx: usize) f64 {
         else => return 0.0,
     }
 }
+
+
 """;
 
     public static async Task EnsureInDirectoryAsync(string directory, CancellationToken ct = default)
