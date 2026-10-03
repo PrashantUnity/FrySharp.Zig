@@ -1,0 +1,60 @@
+{
+  "id": "zig-support",
+  "name": "Zig Language Support",
+  "version": "1.0.0",
+  "description": "First-class Zig language support for FrySharp, providing compilation, ZLS language server integration, Problems diagnostic parsing, and toolchain discovery.",
+  "author": "Code Fry Dev",
+  "repository": "https://github.com/PrashantUnity/FrySharp.Zig",
+  "license": "MIT",
+  "mainEntryClass": "ZigSupportExtension.ZigExtensionEntryPoint",
+  "sourceFiles": [
+    "ZigExtensionEntryPoint.cs",
+    "ZigLanguage.cs",
+    "ZigToolchainProvider.cs",
+    "ZigDiagnosticParser.cs",
+    "ZigScriptRunner.cs",
+    "ZigSyntaxHighlighting.cs"
+  ],
+  "settings": {
+    "zig.toolchainPath": {
+      "key": "zig.toolchainPath",
+      "label": "Zig Compiler Path",
+      "description": "Custom path to the zig executable (leave empty for auto-detection).",
+      "type": "string",
+      "defaultValue": ""
+    },
+    "zig.zlsPath": {
+      "key": "zig.zlsPath",
+      "label": "ZLS Language Server Path",
+      "description": "Path to zls executable for autocompletion and hover intelligence.",
+      "type": "string",
+      "defaultValue": "zls"
+    }
+  },
+  "languages": [
+    {
+      "id": "zig",
+      "displayName": "Zig",
+      "shortName": "ZIG",
+      "extensions": [
+        ".zig",
+        ".zon"
+      ],
+      "aliases": [
+        "zig",
+        "zon"
+      ],
+      "iconKind": "FileCodeOutline",
+      "accentHex": "#F7A41D",
+      "lineCommentPrefix": "//",
+      "syntaxFile": "syntaxes/zig.xshd",
+      "isCompiled": true,
+      "lsp": {
+        "command": "zls",
+        "args": [
+          "--stdio"
+        ]
+      }
+    }
+  ]
+}

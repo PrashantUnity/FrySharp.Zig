@@ -1,0 +1,40 @@
+name: Verify Extension
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate extension.json format
+        run: |
+          python3 -c "
+          import json, sys
+          with open('extension.json') as f:
+              data = json.load(f)
+          assert 'id' in data, 'Missing extension id'
+          assert 'name' in data, 'Missing extension name'
+          assert 'version' in data, 'Missing extension version'
+          assert 'sourceFiles' in data, 'Missing sourceFiles list'
+          print('extension.json is valid!')
+          "
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v1
+        with:
+          version: 0.13.0
+
+      - name: Verify Zig installation
+        run: zig version

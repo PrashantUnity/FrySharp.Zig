@@ -1,0 +1,149 @@
+<?xml version="1.0"?>
+<SyntaxDefinition name="Zig" xmlns="http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008">
+  <Color name="Comment" foreground="#6A9955" fontStyle="italic" />
+  <Color name="DocComment" foreground="#6A9955" />
+  <Color name="String" foreground="#CE9178" />
+  <Color name="Character" foreground="#D16969" />
+  <Color name="Keyword" foreground="#569CD6" fontWeight="bold" />
+  <Color name="ControlFlow" foreground="#C586C0" fontWeight="bold" />
+  <Color name="Type" foreground="#4EC9B0" />
+  <Color name="Builtin" foreground="#DCDCAA" fontStyle="italic" />
+  <Color name="Number" foreground="#B5CEA8" />
+  <Color name="Punctuation" foreground="#D4D4D4" />
+
+  <RuleSet>
+    <!-- Single line comments -->
+    <Span color="DocComment">
+      <Begin>///</Begin>
+    </Span>
+    <Span color="DocComment">
+      <Begin>//!</Begin>
+    </Span>
+    <Span color="Comment">
+      <Begin>//</Begin>
+    </Span>
+
+    <!-- Multi-line string literals (\\ ...) -->
+    <Span color="String">
+      <Begin>\\\\</Begin>
+    </Span>
+
+    <!-- String literals -->
+    <Span color="String">
+      <Begin>"</Begin>
+      <End>"</End>
+      <RuleSet>
+        <Span begin="\\" end="." />
+      </RuleSet>
+    </Span>
+
+    <!-- Character literals -->
+    <Span color="Character">
+      <Begin>'</Begin>
+      <End>'</End>
+      <RuleSet>
+        <Span begin="\\" end="." />
+      </RuleSet>
+    </Span>
+
+    <!-- Numbers -->
+    <Rule color="Number">
+      \b0x[0-9a-fA-F_]+(\.[0-9a-fA-F_]+)?([pP][+-]?[0-9_]+)?\b
+      |
+      \b0o[0-7_]+\b
+      |
+      \b0b[01_]+(\.[01_]+)?\b
+      |
+      \b[0-9_]+(\.[0-9_]+)?([eE][+-]?[0-9_]+)?\b
+    </Rule>
+
+    <!-- Built-in compiler functions (@import, @as, etc.) -->
+    <Rule color="Builtin">
+      @[a-zA-Z_][a-zA-Z0-9_]*
+    </Rule>
+
+    <!-- Control Flow Keywords -->
+    <Keywords color="ControlFlow">
+      <Word>if</Word>
+      <Word>else</Word>
+      <Word>switch</Word>
+      <Word>while</Word>
+      <Word>for</Word>
+      <Word>break</Word>
+      <Word>continue</Word>
+      <Word>return</Word>
+      <Word>defer</Word>
+      <Word>errdefer</Word>
+      <Word>try</Word>
+      <Word>catch</Word>
+      <Word>unreachable</Word>
+      <Word>async</Word>
+      <Word>await</Word>
+      <Word>suspend</Word>
+      <Word>resume</Word>
+    </Keywords>
+
+    <!-- Declaration & Storage Keywords -->
+    <Keywords color="Keyword">
+      <Word>const</Word>
+      <Word>var</Word>
+      <Word>fn</Word>
+      <Word>pub</Word>
+      <Word>inline</Word>
+      <Word>comptime</Word>
+      <Word>export</Word>
+      <Word>extern</Word>
+      <Word>threadlocal</Word>
+      <Word>usingnamespace</Word>
+      <Word>struct</Word>
+      <Word>enum</Word>
+      <Word>union</Word>
+      <Word>error</Word>
+      <Word>test</Word>
+      <Word>opaque</Word>
+      <Word>asm</Word>
+      <Word>volatile</Word>
+      <Word>noalias</Word>
+      <Word>noinline</Word>
+      <Word>callconv</Word>
+      <Word>packed</Word>
+    </Keywords>
+
+    <!-- Built-in Primitive Types -->
+    <Keywords color="Type">
+      <Word>i8</Word>
+      <Word>u8</Word>
+      <Word>i16</Word>
+      <Word>u16</Word>
+      <Word>i32</Word>
+      <Word>u32</Word>
+      <Word>i64</Word>
+      <Word>u64</Word>
+      <Word>i128</Word>
+      <Word>u128</Word>
+      <Word>isize</Word>
+      <Word>usize</Word>
+      <Word>f16</Word>
+      <Word>f32</Word>
+      <Word>f64</Word>
+      <Word>f80</Word>
+      <Word>f128</Word>
+      <Word>bool</Word>
+      <Word>void</Word>
+      <Word>noreturn</Word>
+      <Word>type</Word>
+      <Word>anyerror</Word>
+      <Word>anyframe</Word>
+      <Word>anytype</Word>
+      <Word>c_short</Word>
+      <Word>c_ushort</Word>
+      <Word>c_int</Word>
+      <Word>c_uint</Word>
+      <Word>c_long</Word>
+      <Word>c_ulong</Word>
+      <Word>c_longlong</Word>
+      <Word>c_ulonglong</Word>
+      <Word>c_longdouble</Word>
+    </Keywords>
+  </RuleSet>
+</SyntaxDefinition>
