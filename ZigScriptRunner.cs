@@ -10,7 +10,8 @@ namespace ZigSupportExtension;
 
 /// <summary>
 /// Prepares process run plans for Zig scripts and executables with full interactive stdin support.
-/// Automatically injects fry_display.zig for genuine Display.show / Display.chart / Display.surface APIs.
+/// Automatically injects fry_display.zig in an isolated temporary runtime directory for Display APIs
+/// without polluting the user's workspace.
 /// </summary>
 public sealed class ZigScriptRunner : IScriptRunner
 {
@@ -30,34 +31,31 @@ public sealed class ZigScriptRunner : IScriptRunner
         var scriptPath = context.SourceFilePath;
         var workDir = context.WorkingDirectory;
 
-        var scriptDir = Path.GetDirectoryName(scriptPath);
-        if (!string.IsNullOrEmpty(scriptDir) && Directory.Exists(scriptDir))
-        {
-            await ZigDisplayRuntime.EnsureInDirectoryAsync(scriptDir, ct).ConfigureAwait(false);
-        }
-        if (!string.IsNullOrEmpty(workDir) && Directory.Exists(workDir))
-        {
-            await ZigDisplayRuntime.EnsureInDirectoryAsync(workDir, ct).ConfigureAwait(false);
-        }
-
         string targetScriptPath = scriptPath;
         if (File.Exists(scriptPath))
         {
             var content = await File.ReadAllTextAsync(scriptPath, ct).ConfigureAwait(false);
-            if (content.Contains("std.io.getStdOut") || content.Contains("std.io.getStdErr"))
+            bool needsDisplay = content.Contains("fry_display") || content.Contains("Display.") || content.Contains("fry.");
+            bool needsCompat = content.Contains("std.io.getStdOut") || content.Contains("std.io.getStdErr");
+
+            if (needsDisplay || needsCompat)
             {
                 var compatDir = Path.Combine(Path.GetTempPath(), "FryStudio", "zig_scripts", Guid.NewGuid().ToString("N"));
                 Directory.CreateDirectory(compatDir);
                 await ZigDisplayRuntime.EnsureInDirectoryAsync(compatDir, ct).ConfigureAwait(false);
 
-                var patched = content.Replace("std.io.getStdOut", "fry.getStdOut")
-                                     .Replace("std.io.getStdErr", "fry.getStdErr");
-                if (!patched.Contains("fry_display.zig"))
+                var patched = content;
+                if (needsCompat)
                 {
-                    patched = """
-                        const fry = @import("fry_display.zig");
+                    patched = patched.Replace("std.io.getStdOut", "fry.getStdOut")
+                                     .Replace("std.io.getStdErr", "fry.getStdErr");
+                    if (!patched.Contains("fry_display.zig"))
+                    {
+                        patched = """
+                            const fry = @import("fry_display.zig");
 
-                        """ + patched;
+                            """ + patched;
+                    }
                 }
 
                 targetScriptPath = Path.Combine(compatDir, Path.GetFileName(scriptPath));
