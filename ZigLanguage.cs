@@ -85,7 +85,7 @@ public sealed class ZigLanguage : LanguageDefinition
 
         // Enable ZLS (Zig Language Server) LSP assistant for real-time completion and hover
         string zlsCmd = context.GetSetting<string>("zig.zlsPath") ?? "zls";
-        _assistants = new GenericLspEditorAssistantFactory(zlsCmd, ["--stdio"], launcher, host);
+        _assistants = new GenericLspEditorAssistantFactory(zlsCmd, ["--stdio"], "zig");
     }
 
     public override IHighlightingDefinition? GetHighlighting(bool isDark) =>

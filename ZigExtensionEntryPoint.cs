@@ -63,7 +63,7 @@ public class ZigExtensionEntryPoint : IExtensionEntryPoint
                         {
                             Heading = "ZLS Language Server Integration",
                             Content = "When 'zls' is installed on your PATH, FrySharp automatically connects to it via stdio to provide real-time code completion, function signatures, and doc hovers.",
-                            CalloutType = DocCalloutType.Note,
+                            CalloutType = DocCalloutType.Info,
                             CalloutText = "Configure a custom ZLS path in Settings > Customization if not in your standard PATH."
                         }
                     },

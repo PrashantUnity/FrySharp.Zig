@@ -1,7 +1,6 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
 using PdfEditorApp.Plugins.CSharpEditor.Models;
@@ -42,28 +41,17 @@ public sealed class ZigDiagnosticParser : IDiagnosticParser
                 if (sevText == "warning") severity = DiagnosticSeverity.Warning;
                 else if (sevText == "note") severity = DiagnosticSeverity.Info;
 
-                string filePath = match.Groups["file"].Value.Trim();
-                if (!Path.IsPathRooted(filePath) && !string.IsNullOrEmpty(sourceFilePath))
-                {
-                    var sourceDir = Path.GetDirectoryName(sourceFilePath);
-                    if (!string.IsNullOrEmpty(sourceDir))
-                    {
-                        filePath = Path.GetFullPath(Path.Combine(sourceDir, filePath));
-                    }
-                }
-
                 diagnostics.Add(new DiagnosticItem
                 {
                     Id = $"ZIG_{(sevText.Length > 0 ? char.ToUpper(sevText[0]) + sevText[1..] : "Error")}",
                     Message = message,
                     Severity = severity,
                     Line = Math.Max(1, lineNum),
-                    Column = Math.Max(1, colNum),
-                    FilePath = filePath
+                    Column = Math.Max(1, colNum)
                 });
             }
         }
 
-        return new DiagnosticParseResult(diagnostics, SuggestedPackageToInstall: null);
+        return new DiagnosticParseResult(diagnostics, MissingDependency: null);
     }
 }

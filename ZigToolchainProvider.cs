@@ -66,126 +66,186 @@ public sealed class ZigToolchainProvider : IToolchainProvider
         }
     }
 
-    public async Task<IReadOnlyList<ToolchainInfo>> DiscoverAsync(CancellationToken ct = default)
-    {
-        var discovered = new List<ToolchainInfo>();
-        var seenPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    public void Select(string? executablePath) => _settings.SetSelectedPath("zig", executablePath);
 
-        // 1. User-selected path
+    public void Refresh() => _probes.Clear();
+
+    public async Task<ToolchainResolution> ResolveAsync(ToolchainQuery query, CancellationToken ct = default)
+    {
+        var candidates = await GetCandidatesAsync(query, ct).ConfigureAwait(false);
+
+        foreach (var path in candidates)
+        {
+            var probe = await ProbeAsync(path, ct).ConfigureAwait(false);
+            if (probe == null) continue;
+
+            if (probe.Version < MinimumVersion)
+            {
+                continue;
+            }
+
+            return ToolchainResolution.Found(new ToolchainInfo
+            {
+                LanguageId = "zig",
+                ExecutablePath = probe.Executable,
+                DisplayName = $"Zig {probe.Version} ({Path.GetFileName(probe.Executable)})",
+                Version = probe.Version,
+                Source = "System"
+            });
+        }
+
+        var guidance = new MissingToolchainGuidance(
+            "Zig Compiler Not Found",
+            "Zig compiler is not installed or not available on PATH.",
+            _host.IsMacOS
+                ? ["Run 'brew install zig' in your terminal.", "Or download Zig from https://ziglang.org/download/."]
+                : _host.IsWindows
+                    ? ["Run 'winget install zig.zig' in PowerShell.", "Or download from https://ziglang.org/download/."]
+                    : ["Install via 'sudo snap install zig --classic --beta' or package manager."],
+            "https://ziglang.org/download/");
+
+        return ToolchainResolution.NotFound(guidance);
+    }
+
+    public async Task<IReadOnlyList<ToolchainInfo>> ListAsync(ToolchainQuery query, CancellationToken ct = default)
+    {
+        var candidates = await GetCandidatesAsync(query, ct).ConfigureAwait(false);
+        var list = new List<ToolchainInfo>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var path in candidates)
+        {
+            var probe = await ProbeAsync(path, ct).ConfigureAwait(false);
+            if (probe == null || probe.Version < MinimumVersion) continue;
+
+            if (seen.Add(probe.Executable))
+            {
+                list.Add(new ToolchainInfo
+                {
+                    LanguageId = "zig",
+                    ExecutablePath = probe.Executable,
+                    DisplayName = $"Zig {probe.Version}",
+                    Version = probe.Version,
+                    Source = "System"
+                });
+            }
+        }
+
+        return list;
+    }
+
+    public async Task<ToolchainActionResult> RunActionAsync(string actionId, ToolchainQuery query, Action<string> output, CancellationToken ct = default)
+    {
+        switch (actionId)
+        {
+            case "open-download":
+                BrowserLauncher.Open("https://ziglang.org/download/");
+                return new ToolchainActionResult(true, "Opened https://ziglang.org/download/ in browser.");
+
+            case "brew-install-zig":
+                output("Installing Zig via Homebrew (brew install zig)...\n");
+                var brewResult = await ToolchainSetupRunner.ExecuteAsync("brew install zig", _host, _launcher, output, ct);
+                Refresh();
+                return new ToolchainActionResult(brewResult, brewResult ? "Zig compiler installed." : "Failed to install Zig via brew.");
+
+            default:
+                return new ToolchainActionResult(false, $"Unknown action {actionId}");
+        }
+    }
+
+    private async Task<List<string>> GetCandidatesAsync(ToolchainQuery query, CancellationToken ct)
+    {
+        var list = new List<string>();
+
         var selected = SelectedPath;
         if (!string.IsNullOrWhiteSpace(selected) && _host.FileExists(selected))
         {
-            var probed = await ProbeAsync(selected, ct).ConfigureAwait(false);
-            if (probed != null && seenPaths.Add(probed.ExecutablePath))
-            {
-                discovered.Add(probed.ToToolchainInfo(isCustomUserSelection: true));
-            }
+            list.Add(selected);
         }
 
-        // 2. PATH resolution via login shell
-        var pathEnv = await _host.GetLoginShellPathAsync(ct).ConfigureAwait(false);
-        if (!string.IsNullOrEmpty(pathEnv))
+        // 1. Common system paths
+        if (_host.IsMacOS)
         {
-            foreach (var segment in pathEnv.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
-            {
-                var candidate = Path.Combine(segment.Trim(), _host.IsWindows ? "zig.exe" : "zig");
-                if (_host.FileExists(candidate) && seenPaths.Add(candidate))
-                {
-                    var probed = await ProbeAsync(candidate, ct).ConfigureAwait(false);
-                    if (probed != null)
-                    {
-                        discovered.Add(probed.ToToolchainInfo());
-                    }
-                }
-            }
+            list.Add("/opt/homebrew/bin/zig");
+            list.Add("/usr/local/bin/zig");
+            list.Add(Path.Combine(_host.HomeDirectory, ".zig", "zig"));
         }
-
-        // 3. Known well-known installation locations
-        foreach (var candidate in GetWellKnownLocations())
+        else if (_host.IsWindows)
         {
-            if (_host.FileExists(candidate) && seenPaths.Add(candidate))
+            list.Add(@"C:\Program Files\zig\zig.exe");
+            list.Add(@"C:\ProgramData\chocolatey\bin\zig.exe");
+            list.Add(Path.Combine(_host.HomeDirectory, "scoop", "shims", "zig.exe"));
+            list.Add(Path.Combine(_host.HomeDirectory, ".zig", "zig.exe"));
+        }
+        else
+        {
+            list.Add("/usr/bin/zig");
+            list.Add("/usr/local/bin/zig");
+            list.Add("/snap/bin/zig");
+            list.Add(Path.Combine(_host.HomeDirectory, ".zig", "zig"));
+        }
+
+        // 2. PATH resolution (including login shell path for macOS / Linux)
+        var pathEnv = _host.GetEnvironmentVariable("PATH") ?? string.Empty;
+        var loginPath = await _host.GetLoginShellPathAsync(ct).ConfigureAwait(false);
+        var separator = _host.IsWindows ? ';' : ':';
+        var binaryName = _host.IsWindows ? "zig.exe" : "zig";
+
+        var combined = string.IsNullOrEmpty(loginPath) ? pathEnv : $"{pathEnv}{separator}{loginPath}";
+        foreach (var dir in combined.Split(separator, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var full = Path.Combine(dir.Trim(), binaryName);
+            if (_host.FileExists(full))
             {
-                var probed = await ProbeAsync(candidate, ct).ConfigureAwait(false);
-                if (probed != null)
-                {
-                    discovered.Add(probed.ToToolchainInfo());
-                }
+                list.Add(full);
             }
         }
 
-        return discovered;
+        return list.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
 
-    public async Task<ToolchainInfo?> ResolveActiveAsync(CancellationToken ct = default)
+    private async Task<ProbeResult?> ProbeAsync(string executable, CancellationToken ct)
     {
-        var all = await DiscoverAsync(ct).ConfigureAwait(false);
-        return all.FirstOrDefault(t => t.IsSelected) ?? all.FirstOrDefault();
-    }
-
-    public Task SelectAsync(string executablePath, CancellationToken ct = default)
-    {
-        _settings.SetSelectedPath("zig", executablePath);
-        return Task.CompletedTask;
-    }
-
-    public Task ClearSelectionAsync(CancellationToken ct = default)
-    {
-        _settings.ClearSelectedPath("zig");
-        return Task.CompletedTask;
-    }
-
-    public async Task<ProbeResult?> ProbeAsync(string executablePath, CancellationToken ct = default)
-    {
-        if (string.IsNullOrWhiteSpace(executablePath)) return null;
-
-        var lazy = _probes.GetOrAdd(executablePath, path => new Lazy<Task<ProbeResult?>>(() => ProbeInternalAsync(path, ct)));
-        return await lazy.Value.ConfigureAwait(false);
-    }
-
-    private async Task<ProbeResult?> ProbeInternalAsync(string executablePath, CancellationToken ct)
-    {
+        var probe = _probes.GetOrAdd(executable, p => new Lazy<Task<ProbeResult?>>(() => RunProbeAsync(p, ct)));
         try
         {
-            var result = await _host.RunAsync(executablePath, ["version"], TimeSpan.FromSeconds(5), ct).ConfigureAwait(false);
-            if (result.ExitCode != 0) return null;
+            return await probe.Value.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            _probes.TryRemove(new KeyValuePair<string, Lazy<Task<ProbeResult?>>>(executable, probe));
+            throw;
+        }
+    }
 
-            var match = VersionRegex.Match(result.StandardOutput.Trim());
+    private async Task<ProbeResult?> RunProbeAsync(string executable, CancellationToken ct)
+    {
+        if (!_host.FileExists(executable)) return null;
+
+        try
+        {
+            var result = await _host.RunAsync(executable, ["version"], TimeSpan.FromSeconds(5), ct).ConfigureAwait(false);
+            ct.ThrowIfCancellationRequested();
+
+            if (result.ExitCode != 0 && string.IsNullOrWhiteSpace(result.StandardOutput))
+            {
+                return null;
+            }
+
+            var text = result.StandardOutput.Trim();
+            var match = VersionRegex.Match(text);
             if (match.Success && Version.TryParse(match.Groups["version"].Value, out var ver))
             {
-                return new ProbeResult(
-                    LanguageId: "zig",
-                    ExecutablePath: executablePath,
-                    Version: ver,
-                    RawVersionString: result.StandardOutput.Trim(),
-                    DisplayName: $"Zig {ver.Major}.{ver.Minor}.{ver.Build}");
+                return new ProbeResult(executable, ver);
             }
         }
-        catch { }
+        catch
+        {
+            return null;
+        }
 
         return null;
     }
 
-    private IEnumerable<string> GetWellKnownLocations()
-    {
-        if (_host.IsMacOS)
-        {
-            yield return "/opt/homebrew/bin/zig";
-            yield return "/usr/local/bin/zig";
-            yield return Path.Combine(_host.HomeDirectory, ".zig", "zig");
-        }
-        else if (_host.IsWindows)
-        {
-            yield return @"C:\Program Files\zig\zig.exe";
-            yield return @"C:\ProgramData\chocolatey\bin\zig.exe";
-            yield return Path.Combine(_host.HomeDirectory, "scoop", "shims", "zig.exe");
-            yield return Path.Combine(_host.HomeDirectory, ".zig", "zig.exe");
-        }
-        else
-        {
-            yield return "/usr/bin/zig";
-            yield return "/usr/local/bin/zig";
-            yield return "/snap/bin/zig";
-            yield return Path.Combine(_host.HomeDirectory, ".zig", "zig");
-        }
-    }
+    private sealed record ProbeResult(string Executable, Version Version);
 }
