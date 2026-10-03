@@ -6,6 +6,7 @@ using AvaloniaEdit;
 using AvaloniaEdit.Highlighting;
 using AvaloniaEdit.Indentation;
 using FrySharp.Sdk;
+using PdfEditorApp.Plugins.CSharpEditor.Services.Kernels;
 using PdfEditorApp.Plugins.CSharpEditor.Services.Languages;
 using PdfEditorApp.Plugins.CSharpEditor.Services.Languages.Lsp;
 using PdfEditorApp.Plugins.CSharpEditor.Services.Processes;
@@ -14,8 +15,8 @@ using PdfEditorApp.Plugins.CSharpEditor.Services.Toolchains;
 namespace ZigSupportExtension;
 
 /// <summary>
-/// Full-featured language definition for Zig, bringing Zig into the VS Code script studio,
-/// toolchain manager, Problems deck, syntax coloring, and ZLS autocompletion.
+/// Full-featured language definition for Zig, bringing Zig into interactive polyglot notebooks,
+/// the VS Code script studio, toolchain manager, Problems deck, syntax coloring, and ZLS autocompletion.
 /// </summary>
 public sealed class ZigLanguage : LanguageDefinition
 {
@@ -23,6 +24,7 @@ public sealed class ZigLanguage : LanguageDefinition
     private readonly ZigScriptRunner _runner;
     private readonly ZigDiagnosticParser _diagnostics;
     private readonly IEditorAssistantFactory? _assistants;
+    private readonly INotebookKernelFactory _kernels;
 
     public override string Id => "zig";
     public override string DisplayName => "Zig";
@@ -36,14 +38,14 @@ public sealed class ZigLanguage : LanguageDefinition
     public override string NewFileTemplate => """
         const std = @import("std");
 
-        pub fn main() !void {
-            const stdout = std.io.getStdOut().writer();
-            try stdout.print("Hello from FrySharp Zig!\n", .{});
+        pub fn main() void {
+            std.debug.print("Hello from FrySharp Zig!\n", .{});
         }
 
         """;
 
     public override LanguageCapabilities Capabilities =>
+        LanguageCapabilities.NotebookCells |
         LanguageCapabilities.StandardInput |
         LanguageCapabilities.LiveDiagnostics |
         LanguageCapabilities.Templates |
@@ -55,6 +57,7 @@ public sealed class ZigLanguage : LanguageDefinition
     public override IScriptRunner? ScriptRunner => _runner;
     public override IDiagnosticParser? RunDiagnostics => _diagnostics;
     public override IEditorAssistantFactory? EditorAssistants => _assistants;
+    public override INotebookKernelFactory? NotebookKernels => _kernels;
 
     public ZigLanguage(IExtensionContext context)
     {
@@ -82,6 +85,8 @@ public sealed class ZigLanguage : LanguageDefinition
         _toolchain = new ZigToolchainProvider(host, launcher, settings);
         _runner = new ZigScriptRunner(_toolchain);
         _diagnostics = new ZigDiagnosticParser();
+        _kernels = new DelegateKernelFactory(kernelContext =>
+            new ZigNotebookKernel(_toolchain, launcher, host, kernelContext));
 
         // Enable ZLS (Zig Language Server) LSP assistant for real-time completion and hover
         string zlsCmd = context.GetSetting<string>("zig.zlsPath") ?? "zls";

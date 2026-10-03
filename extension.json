@@ -13,6 +13,7 @@
     "ZigToolchainProvider.cs",
     "ZigDiagnosticParser.cs",
     "ZigScriptRunner.cs",
+    "ZigNotebookKernel.cs",
     "ZigSyntaxHighlighting.cs"
   ],
   "settings": {
